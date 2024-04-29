@@ -17,6 +17,8 @@ package_upgrade: false
 package_reboot_if_required: false
 packages:
   - yum-utils
+  - etckeeper
+  - etckeeper-dnf
   - bzip2
   - zstd
   - unzip
