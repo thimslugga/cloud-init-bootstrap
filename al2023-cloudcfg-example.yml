@@ -1,0 +1,99 @@
+#cloud-config
+# vim:syntax=yaml
+
+disable_ec2_metadata: false
+datasource:
+  Ec2:
+    timeout: 50
+    max_wait: 120
+    metadata_urls:
+      - http://169.254.169.254:80
+      #- http://[fd00:ec2::254]:80
+      #- http://instance-data:8773
+    apply_full_imds_network_config: true
+
+package_update: false
+package_upgrade: false
+package_reboot_if_required: false
+packages:
+  - yum-utils
+  - bzip2
+  - zstd
+  - unzip
+  - sysstat
+  - ethtool
+  - iptroute-tc
+  - nftables
+  - grubby
+  - git
+  - vim
+  - jq
+  - ansible
+  - docker
+  - amazon-ecr-credential-helper
+  - oci-add-hooks
+  - udica
+
+users:
+  - name: ansible
+    homedir: /home/ansible
+    shell: /bin/bash
+    sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    ssh_authorized_keys:
+      - <SSH Public Key>
+
+write_files:
+  - path: /etc/sysctl.d/99-custom-tuning.conf
+    permissions: '0644'
+    owner: root
+    content: |
+      kernel.printk=3 4 1 7
+      kernel.panic=5
+      kernel.unprivileged_bpf_disabled=0
+      vm.min_free_kbytes=1048576
+      vm.swappiness=10
+      net.core.message_cost=0
+      net.core.bpf_jit_enable=1
+      net.core.default_qdisc=fq
+      net.mptcp.enabled=1
+      net.ipv4.ip_default_ttl=127
+      net.ipv4.tcp_mtu_probing=1
+      net.ipv4.tcp_window_scaling=1
+      net.ipv4.tcp_slow_start_after_idle=0
+      net.ipv4.ip_local_port_range="1024 65535"
+      net.ipv4.conf.eth0.send_redirects=0
+      net.ipv4.neigh.default.gc_thresh1=0
+      net.ipv4.neigh.default.gc_thresh2=15360
+      net.ipv4.neigh.default.gc_thresh3=16384
+      net.ipv6.neigh.default.gc_thresh1=0
+      net.ipv6.neigh.default.gc_thresh2=15360
+      net.ipv6.neigh.default.gc_thresh3=16384
+      net.ipv4.tcp_wmem=4096 20480 4194304
+  - path: /etc/udev/rules.d/51-ec2-net-tuning.rules
+    permissions: '0644'
+    owner: root
+    content: |
+      SUBSYSTEM=="net", ACTION=="add|change", KERNEL=="eth*|en*", DRIVERS=="ena", RUN+="/usr/sbin/ethtool -G %k rx 4096 tx 1024"
+
+runcmd:
+  - [ sh, -xc, "echo $(date) ': Hello, World!'" ]
+  #- [/usr/bin/dnf, -y, install, <package>]
+  #- [/usr/bin/systemctl, start, --no-block, <service>.service]
+  - [/usr/bin/systemctl, daemon-reload]
+  - [systemctl, restart, --no-block, systemd-sysctl.service]
+  #- [/usr/sbin/sysctl, --system]
+  - [udevadm, control, --reload-rules]
+  - [udevadm, trigger, --attr-match=subsystem=net]
+  - [systemctl, reset-failed]
+
+ansible:
+  install_method: distro
+  #run_user: ansible
+  package_name: ansible
+  pull:
+    url: "https://github.com/thimslugga/cloud-init-bootstrap.git"
+    playbook_name: "al2023.yml"
+    #accept_host_key: true
+
+final_message: "The system is finally up, after $UPTIME seconds"
+output: { all: "| tee -a /var/log/cloud-init-output.log" }
