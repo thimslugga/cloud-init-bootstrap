@@ -1,0 +1,25 @@
+---
+- hosts: localhost
+  connection: local
+  become: true
+  vars:
+    packages:
+      - yum-utils
+      - git
+      - bzip2
+      - zstd
+      - unzip
+      - ethtool
+      - iproute-tc
+      - nftables
+      - grubby
+      - git
+      - vim
+      - jq
+      - ansible
+      - docker
+      - amazon-ecr-credential-helper
+      - oci-add-hooks
+      - udica
+  roles:
+    - dnf
