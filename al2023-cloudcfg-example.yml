@@ -1,48 +1,152 @@
 #cloud-config
 # vim:syntax=yaml
 
+# https://github.com/canonical/cloud-init/tree/main/doc/examples
+# https://github.com/canonical/cloud-init/blob/main/doc/examples/cloud-config.txt
+
+# boot commands
+# default: none
+# This is very similar to runcmd above, but commands run very early
+# in the boot process, only slightly after a 'boothook' would run.
+#  - bootcmd will run on every boot
+#  - INSTANCE_ID variable will be set to the current instance ID
+#  - 'cloud-init-per' command can be used to make bootcmd run exactly once
+#bootcmd:
+# - chsh -s /bin/bash ec2-user
+# - echo 192.168.1.130 us.archive.ubuntu.com > /etc/hosts
+# - [ cloud-init-per, once, mymkfs, mkfs, /dev/nvme1n1 ]
+
+# Remove access to the ec2 metadata service early in boot via null route.
+# The null route can be removed (by root) with:
+#    route del -host 169.254.169.254 reject
+# default: false
 disable_ec2_metadata: false
+
 datasource:
   Ec2:
     timeout: 50
     max_wait: 120
     metadata_urls:
       - http://169.254.169.254:80
-      #- http://[fd00:ec2::254]:80
+      - http://[fd00:ec2::254]:80
       #- http://instance-data:8773
-    apply_full_imds_network_config: true
+    #apply_full_imds_network_config: true
 
+#network:
+#  config: disabled
+
+#hostname: <hostname>
+#fqdn: <hostname>.<example.com>
+#preserve_hostname: true
+#manage_etc_hosts: true
+#manage_resolv_conf: true
+resolv_conf:
+  nameservers: ['169.254.169.253']
+  searchdomains:
+    - ec2.internal
+    #- domain.com
+  domain: domain.com
+  options:
+    timeout: 5
+
+# set the locale to a given locale
+# default: en_US.UTF-8
+locale: en_US.UTF-8
+# render template default-locale.tmpl to locale_configfile
+#locale_configfile: /etc/default/locale
+
+#keyboard:
+#  layout: us
+
+# timezone: set the timezone for this instance
+# the value of 'timezone' must exist in /usr/share/zoneinfo
+timezone: Etc/UTC
+ntp:
+  enabled: true
+
+# resize_rootfs should the / filesystem be resized on first boot
+# this allows you to launch an instance with a larger disk / partition
+# and have the instance automatically grow / to accomoddate it
+# set to 'False' to disable
+# by default, the resizefs is done early in boot, and blocks
+# if resize_rootfs is set to 'noblock', then it will be run in parallel
+#resize_rootfs: True
+
+#growpart:
+#  mode: auto
+#  devices: ['/']
+
+# disable ssh access as root.
+# if you want to be able to ssh in to the system as the root user
+# rather than as the 'ubuntu' user, then you must set this to false
+# default: true
+disable_root: true
+
+ssh_pwauth: false
+ssh_deletekeys: false
+
+#repo_update: true
+#repo_upgrade: all
+#repo_upgrade_exclude:
+#  - kernel
+
+# Update apt database on first boot
+# (ie run apt-get update)
+# Default: true
 package_update: false
+# Upgrade the instance on first boot
+# Default: false
 package_upgrade: false
+# Reboot after package install/update if necessary
+# Default: false
 package_reboot_if_required: false
+# For 'apt' specific config, see cloud-config-apt.txt
 packages:
   - yum-utils
+  - ca-certificates
+  - wget
+  - curl
+  - jq
+  - git-core
+  - git-lfs
   - etckeeper
   - etckeeper-dnf
   - bzip2
   - zstd
   - unzip
   - sysstat
+  - telnet
   - ethtool
   - iptroute-tc
   - nftables
   - grubby
-  - git
   - vim
-  - jq
   - ansible
   - docker
   - amazon-ecr-credential-helper
   - oci-add-hooks
   - udica
 
+# disable ssh access for non-root-users
+# To disable ssh access for non-root users, ssh_redirect_user: true can be
+# provided for any use in the 'users' list. This will prompt any ssh login
+# attempts as that user with a message like that in disable_root_opts which
+# redirects the person to login as <default_username>
+# This option can not be combined with either ssh_authorized_keys or
+# ssh_import_id.
 users:
+  - default
   - name: ansible
-    homedir: /home/ansible
-    shell: /bin/bash
+    gecos: Ansible User
+    groups: users,admin,sudo
     sudo: 'ALL=(ALL) NOPASSWD:ALL'
+    shell: /bin/bash
+    homedir: /home/ansible
     ssh_authorized_keys:
-      - <SSH Public Key>
+      - "ssh-rsa ..."
+     #passwd: hashed_password
+     #plain_text_passwd: plaintext_password
+     #lock_passwd: true
 
 write_files:
   - path: /etc/sysctl.d/99-custom-tuning.conf
@@ -53,40 +157,43 @@ write_files:
       kernel.panic=5
       kernel.unprivileged_bpf_disabled=0
       vm.min_free_kbytes=1048576
+      # Raise to 1048576 from the Linux default 65530
+      vm.max_map_count=1048576
       vm.swappiness=10
-      net.core.message_cost=0
       net.core.bpf_jit_enable=1
+      net.core.message_cost=0
       net.core.default_qdisc=fq
       net.mptcp.enabled=1
-      net.ipv4.ip_default_ttl=127
-      net.ipv4.tcp_mtu_probing=1
-      net.ipv4.tcp_window_scaling=1
-      net.ipv4.tcp_slow_start_after_idle=0
-      net.ipv4.ip_local_port_range="1024 65535"
-      net.ipv4.conf.eth0.send_redirects=0
+      net.ipv4.tcp_wmem=4096 20480 4194304
       net.ipv4.neigh.default.gc_thresh1=0
       net.ipv4.neigh.default.gc_thresh2=15360
       net.ipv4.neigh.default.gc_thresh3=16384
       net.ipv6.neigh.default.gc_thresh1=0
       net.ipv6.neigh.default.gc_thresh2=15360
       net.ipv6.neigh.default.gc_thresh3=16384
-      net.ipv4.tcp_wmem=4096 20480 4194304
+      net.ipv4.ip_local_port_range="1024 65535"
+      net.ipv4.ip_default_ttl=127
+      net.ipv4.tcp_mtu_probing=1
+      net.ipv4.tcp_window_scaling=1
+      net.ipv4.tcp_slow_start_after_idle=0
+      net.ipv4.conf.eth0.send_redirects=0
   - path: /etc/udev/rules.d/51-ec2-net-tuning.rules
     permissions: '0644'
     owner: root
     content: |
       SUBSYSTEM=="net", ACTION=="add|change", KERNEL=="eth*|en*", DRIVERS=="ena", RUN+="/usr/sbin/ethtool -G %k rx 4096 tx 1024"
+  #- path: /usr/local/bin/my-script
+  #  permissions: '0755'
+  #  content: |
+  #   #!/bin/bash
+  #   echo "This is a script!"
 
-runcmd:
-  - [ sh, -xc, "echo $(date) ': Hello, World!'" ]
-  #- [/usr/bin/dnf, -y, install, <package>]
-  #- [/usr/bin/systemctl, start, --no-block, <service>.service]
-  - [/usr/bin/systemctl, daemon-reload]
-  - [systemctl, restart, --no-block, systemd-sysctl.service]
-  #- [/usr/sbin/sysctl, --system]
-  - [udevadm, control, --reload-rules]
-  - [udevadm, trigger, --attr-match=subsystem=net]
-  - [systemctl, reset-failed]
+#scripts-user:
+#  - /usr/local/bin/my-script
+
+
+  sysctl:
+    vm.max_map_count: 262144
 
 ansible:
   install_method: distro
@@ -97,5 +204,73 @@ ansible:
     playbook_name: "al2023.yml"
     #accept_host_key: true
 
+# Note: Don't write files to /tmp from cloud-init use /run/somedir instead.
+# Early boot environments can race systemd-tmpfiles-clean LP: #1707222.
+
+runcmd:
+  - [ sh, -c, echo "========= RUNCMD START HERE =========" ]
+  - [ sh, -xc, "echo $(date) ': Hello, World!'" ]
+  - curl -w "\n" --connect-timeout 10 'http://169.254.169.254/latest/meta-data/hostname'
+  #- dnf install -y https://s3.amazonaws.com/ec2-downloads-windows/SSMAgent/latest/linux_amd64/amazon-ssm-agent.rpm
+  - [ /usr/bin/systemctl, daemon-reload ]
+  #- [ /usr/bin/systemctl, enable, amazon-ssm-agent.service ]
+  #- [ /usr/bin/systemctl, start, --no-block, amazon-ssm-agent.service ]
+  #- [ /usr/bin/dnf, -y, install, <package> ]
+  #- [ /usr/bin/systemctl, start, --no-block, <service>.service ]
+  - [ /usr/bin/systemctl, restart, --no-block, systemd-sysctl.service ]
+  #- [ /usr/sbin/sysctl, --system ]
+  - [ udevadm, control, --reload-rules ]
+  - [ udevadm, trigger, --attr-match=subsystem=net ]
+  - [ /usr/bin/systemctl, reset-failed ]
+  - [ sh, -c, echo "========= RUNCMD END HERE =========" ]
+
+# final_message
+# default: cloud-init boot finished at $TIMESTAMP. Up $UPTIME seconds
+# this message is written by cloud-final when the system is finished
+# its first boot.
+# This message is rendered as if it were a template.  If you
+# want jinja, you have to start the line with '## template:jinja\n'
 final_message: "The system is finally up, after $UPTIME seconds"
-output: { all: "| tee -a /var/log/cloud-init-output.log" }
+
+# phone_home: if this dictionary is present, then the phone_home
+# cloud-config module will post specified data back to the given url.
+#default: none
+#phone_home:
+  #url: http://my.example.com/$INSTANCE_ID/
+  #post: [ pub_key_rsa, pub_key_ecdsa, instance_id ]
+  #post: all
+  #tries: 10
+
+# Capture all subprocess output into a logfile, which is useful for troubleshooting cloud-init issues.
+output: { all: '| tee -a /var/log/cloud-init-output.log' }
+
+# Alternative version
+#output:
+#  init: "> /var/log/my-cloud-init.log"
+#  config: [ ">> /tmp/foo.out", "> /tmp/foo.err" ]
+#  final:
+#    output: "| tee /tmp/final.stdout | tee /tmp/bar.stdout"
+#    error: "&1"
+
+## poweroff or reboot system after finished
+# default: none
+#
+# power_state can be used to make the system shutdown, reboot or
+# halt after boot is finished.  This same thing can be achieved by
+# user-data scripts or by runcmd by simply invoking 'shutdown'.
+#
+# Doing it this way ensures that cloud-init is entirely finished with
+# modules that would be executed, and avoids any error/log messages
+# that may go to the console as a result of system services like
+# syslog being taken down while cloud-init is running.
+#
+# delay: form accepted by shutdown.  default is 'now'. other format
+#        accepted is '+m' (m in minutes)
+# mode: required. must be one of 'poweroff', 'halt', 'reboot'
+# message: provided as the message argument to 'shutdown'. default is none.
+#power_state:
+#  delay: '+1'
+#  mode: reboot
+#  timeout: 120
+#  condition: True
+#  message: Rebooting in one minute.
