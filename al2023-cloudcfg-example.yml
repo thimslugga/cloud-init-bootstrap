@@ -4,7 +4,8 @@
 # https://github.com/canonical/cloud-init/tree/main/doc/examples
 # https://github.com/canonical/cloud-init/blob/main/doc/examples/cloud-config.txt
 
-# boot commands
+### Boot Commands ###
+
 # default: none
 # This is very similar to runcmd above, but commands run very early
 # in the boot process, only slightly after a 'boothook' would run.
@@ -15,6 +16,8 @@
 # - chsh -s /bin/bash ec2-user
 # - echo 192.168.1.130 us.archive.ubuntu.com > /etc/hosts
 # - [ cloud-init-per, once, mymkfs, mkfs, /dev/nvme1n1 ]
+
+### IMDS ###
 
 # Remove access to the ec2 metadata service early in boot via null route.
 # The null route can be removed (by root) with:
@@ -35,9 +38,15 @@ datasource:
 #network:
 #  config: disabled
 
+# https://cloudinit.readthedocs.io/en/latest/reference/modules.html#set-hostname
+# https://stackoverflow.com/a/61064656
+# https://docs.aws.amazon.com/linux/al2/ug/set-hostname.html
+#
+# If preserve_hostname is set, then the hostname will not be altered i.e. if true 
+# this will cause the set+update hostname module to not operate.
+preserve_hostname: false
 #hostname: <hostname>
 #fqdn: <hostname>.<example.com>
-#preserve_hostname: true
 #manage_etc_hosts: true
 #manage_resolv_conf: true
 resolv_conf:
