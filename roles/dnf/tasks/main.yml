@@ -1,14 +1,16 @@
 ---
-- name: "install packages"
-  dnf:
-    name: "*"
-    disable_gpg_check: yes
-    state: latest
 
-- name: "install packages"
-  dnf:
+- name: "Install packages"
+  ansible.builtin.dnf:
+    name: "*"
+    state: latest
+    disable_gpg_check: true
+
+
+- name: "Install packages"
+  ansible.builtin.dnf:
     name:
       - "{{ item }}"
     state: latest
-    disable_gpg_check: yes
+    disable_gpg_check: true
   loop: "{{ packages }}"

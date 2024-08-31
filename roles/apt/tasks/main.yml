@@ -1,12 +1,14 @@
 ---
-- name: "install packages"
-  apt:
+
+- name: "Install packages"
+  ansible.builtin.apt:
     name: "*"
-    update_cache: yes
+    state: latest
+    update_cache: true
     cache_valid_time: 3600
 
-- name: "install packages"
-  apt:
+- name: "Install packages"
+  ansible.builtin.apt:
     name:
       - "{{ item }}"
     state: latest
